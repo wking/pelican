@@ -6,6 +6,7 @@ import logging
 import datetime
 import subprocess
 import shutil
+import traceback
 
 from codecs import open
 from collections import defaultdict
@@ -325,6 +326,7 @@ class ArticlesGenerator(Generator):
                 content, metadata = read_file(f, settings=self.settings)
             except Exception, e:
                 logger.warning(u'Could not process %s\n%s' % (f, str(e)))
+                logger.debug(traceback.format_exc())
                 continue
 
             # if no category is set, use the name of the path as a category
@@ -452,6 +454,7 @@ class PagesGenerator(Generator):
                 content, metadata = read_file(f, settings=self.settings)
             except Exception, e:
                 logger.warning(u'Could not process %s\n%s' % (f, str(e)))
+                logger.debug(traceback.format_exc())
                 continue
             signals.pages_generate_context.send(self, metadata=metadata)
             page = Page(content, metadata, settings=self.settings,
