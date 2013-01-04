@@ -339,7 +339,7 @@ def mkdir_p(path):
 
 
 def copytree(src, dst, symlinks=False, ignore=None):
-    """shutil.copytree clone
+    """shutil.copytree, but allow existing destination directories
 
     :param src: the source dir (from shutil.copytree)
     :param dst: the destination dir (from shutil.copytree)
@@ -356,7 +356,7 @@ def copytree(src, dst, symlinks=False, ignore=None):
     else:
         ignored_names = set()
 
-    os.makedirs(dst)
+    mkdir_p(dst)
     errors = []
     for name in names:
         if name in ignored_names:
