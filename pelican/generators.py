@@ -79,6 +79,17 @@ class Generator(object):
                         % (name, self._templates_path))
         return self._templates[name]
 
+    def _include_path(self, path, extensions=None):
+        """Inclusion logic for .get_files()
+        """
+        if extensions is None:
+            extensions = self.markup
+        basename = os.path.basename(path)
+        if extensions is False or \
+                (True in [basename.endswith(ext) for ext in extensions]):
+            return True
+        return False
+
     def get_files(self, path, exclude=[], extensions=None):
         """Return a list of files to use, based on rules
 
@@ -87,24 +98,24 @@ class Generator(object):
         :param extensions: the list of allowed extensions (if False, all
             extensions are allowed)
         """
-        if extensions is None:
-            extensions = self.markup
-
         files = []
 
-        try:
-            iter = os.walk(path, followlinks=True)
-        except TypeError:  # python 2.5 does not support followlinks
-            iter = os.walk(path)
+        if os.path.isdir(path):
+            try:
+                iter = os.walk(path, followlinks=True)
+            except TypeError:  # python 2.5 does not support followlinks
+                iter = os.walk(path)
 
-        for root, dirs, temp_files in iter:
-            for e in exclude:
-                if e in dirs:
-                    dirs.remove(e)
-            for f in temp_files:
-                if extensions is False or \
-                        (True in [f.endswith(ext) for ext in extensions]):
-                    files.append(os.sep.join((root, f)))
+            for root, dirs, temp_files in iter:
+                for e in exclude:
+                    if e in dirs:
+                        dirs.remove(e)
+                for f in temp_files:
+                    fp = os.path.join(root, f)
+                    if self._include_path(fp, extensions):
+                        files.append(fp)
+        elif os.path.exists(path) and self._include_path(path, extensions):
+            files.append(path)  # can't walk non-directories
         return files
 
     def add_filename(self, content):
