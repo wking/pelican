@@ -19,7 +19,7 @@ from jinja2 import (Environment, FileSystemLoader, PrefixLoader, ChoiceLoader,
 from pelican.contents import Article, Page, Category, StaticContent, \
         is_valid_content
 from pelican.readers import read_file
-from pelican.utils import copy, process_translations, mkdir_p
+from pelican.utils import copy, process_translations, mkdir_p, copytree
 from pelican import signals
 
 
@@ -519,9 +519,12 @@ class StaticGenerator(Generator):
                          'theme', self.output_path, '.')
         # copy all StaticContent files
         for sc in self.staticfiles:
-            mkdir_p(os.path.dirname(sc.save_as))
-            shutil.copy(sc.filepath, sc.save_as)
             logger.info('copying %s to %s' % (sc.filepath, sc.save_as))
+            if os.path.isdir(sc.filepath):
+                copytree(sc.filepath, sc.save_as)
+            else:
+                mkdir_p(os.path.dirname(sc.save_as))
+                shutil.copy(sc.filepath, sc.save_as)
 
 
 class PdfGenerator(Generator):
