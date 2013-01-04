@@ -510,9 +510,14 @@ class StaticGenerator(Generator):
                 self.context['filenames'][f_rel] = sc
         # same thing for FILES_TO_COPY
         for src, dest in self.settings['FILES_TO_COPY']:
-            sc = StaticContent(src, dest, settings=self.settings)
-            self.staticfiles.append(sc)
-            self.context['filenames'][src] = sc
+            src_root = os.path.join(self.path, src)
+            for f in self.get_files(src_root, extensions=False):
+                f_rel_src = os.path.relpath(f, src_root)
+                f_rel_path = os.path.relpath(f, self.path)
+                d_rel = os.path.join(dest, f_rel_src)
+                sc = StaticContent(f_rel_path, d_rel, settings=self.settings)
+                self.staticfiles.append(sc)
+                self.context['filenames'][d_rel] = sc
 
     def generate_output(self, writer):
         self._copy_paths(self.settings['THEME_STATIC_PATHS'], self.theme,
