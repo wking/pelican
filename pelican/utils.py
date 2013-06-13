@@ -23,6 +23,22 @@ from operator import attrgetter
 
 logger = logging.getLogger(__name__)
 
+try:
+    import pygit2
+except ImportError as e:
+    pygit2 = None
+    _pygit2_import_error = e
+else:
+    if getattr(pygit2, '__version__', '0.17.3') == '0.17.3':
+        pygit2 = None
+        _pygit2_import_error = NotImplementedError(
+            'pygit2 <= 0.17.3 not supported')
+
+
+# Repository instance cache for _pygit_mtime
+_REPOSITORIES = {}
+_COMMITS = {}
+
 
 def strftime(date, date_format):
     '''
@@ -552,20 +568,89 @@ def split_all(path):
     return components
 
 
-def git_mtime(filename, use_last_modification=True, git_binary="git"):
+def git_mtime(filename, use_last_modification=True, git_binary=None):
 
     """Determines the git modification time of a file and returns it as a
     datetime.datetime object.
 
-    If use_last_modification is True, then the  date and time of the last
+    If use_last_modification is True, then the date and time of the last
     modification will be returned. Otherwise the date and time of the first
     commit containing the file will be returned.
 
     The optional argument 'git_binary' can be used to specify the git binary to
     use.
     """
+    if pygit2:
+        return _pygit_mtime(
+            filename=filename, use_last_modification=use_last_modification)
+    return _subprocess_git_mtime(
+        filename=filename, use_last_modification=use_last_modification,
+        git_binary=git_binary)
 
-    call = [git_binary, "log", "--pretty=format:%at ", filename]
+
+def _git_find_repo(path):
+    while True:
+        repo_dir = os.path.join(path, '.git')
+        if os.path.exists(repo_dir):
+            return repo_dir
+        if not path:
+            raise ValueError(path)
+        path = os.path.dirname(path)
+
+
+def _pygit_log_file(repo, head=None, path=None, backward_in_time=True):
+    if not head:
+        head = repo.head
+    if not path:
+        raise ValueError(path)
+    last_oid = None
+    last_commit = None
+    if repo.path not in _COMMITS:
+        _COMMITS[repo.path] = list(repo.walk(head.oid, pygit2.GIT_SORT_TIME))
+    commits = _COMMITS[repo.path]
+    if not backward_in_time:
+        commits = reversed(commits)
+    for commit in commits:
+        try:
+            oid = commit.tree[path].oid
+        except KeyError:
+            continue
+        else:
+            if oid != last_oid and last_oid:  # change!
+                yield last_commit
+            last_oid = oid
+        last_commit = commit
+    if last_commit:
+        yield last_commit
+
+
+def _pygit_commit_time(commit):
+    date = datetime.utcfromtimestamp(commit.commit_time)
+    date = pytz.utc.localize(date)
+    tz = pytz.FixedOffset(commit.commit_time_offset)
+    return date.astimezone(tz)
+
+
+def _pygit_mtime(filename, use_last_modification=True):
+    repo_dir = _git_find_repo(path=os.path.dirname(filename))
+    relpath = os.path.relpath(filename, os.path.dirname(repo_dir))
+    if repo_dir not in _REPOSITORIES:
+        _REPOSITORIES[repo_dir] = pygit2.Repository(repo_dir)
+    repo = _REPOSITORIES[repo_dir]
+    for commit in _pygit_log_file(
+            repo=repo, path=relpath, backward_in_time=use_last_modification):
+        return _pygit_commit_time(commit)
+    raise ValueError(filename)
+
+
+def _subprocess_git_mtime(filename, use_last_modification=True,
+                          git_binary=None):
+    if not git_binary:
+        git_binary = 'git'
+    repo_dir = _git_find_repo(path=os.path.dirname(filename))
+    relpath = os.path.relpath(filename, os.path.dirname(repo_dir))
+    call = [git_binary, 'log', '--pretty=format:%at', '--',
+            os.path.basename(filename)]
     repository= os.path.dirname(filename)
     try:
         output = subprocess.check_output(call, cwd=repository).decode('utf-8').splitlines()
